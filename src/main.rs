@@ -1,17 +1,22 @@
-use macroquad::prelude::*;
 mod chip8;
-use chip8::Emulator;
+mod window;
 
-#[macroquad::main("CHIP8 Emulator")]
+use macroquad::prelude::*;
+use chip8::{Emulator, rom};
+use window::configuration;
+
+#[macroquad::main(configuration)]
 async fn main() {
-    let em = Emulator::new();
+    let mut em = Emulator::new();
+    em.load_rom(rom::ROMLoader::new("roms/ibm_logo.ch8").unwrap());
 
     loop {
-        let delta = get_frame_time();
+        clear_background(BLACK);
 
-        if delta < 1.0 / 60.0 {}
+        em.fde();
+        em.display();
+        draw_fps();
+       
         next_frame().await
     }
-
-    println!("Hello, world!");
 }

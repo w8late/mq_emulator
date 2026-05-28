@@ -1,12 +1,16 @@
+use macroquad::{color::Color, shapes};
+use crate::chip8::rom;
+
+#[allow(dead_code)]
 pub struct Emulator {
-    memory: [u8; 4096],     //4 kB of RAM
-    pc: usize,                //program counter: current instruction in memory
-    ir: u16,                //index register: locations in memory
-    stack: Vec<u16>,        //stack for functions
-    delay_timer: u8,        //timer decremented at 60 Hz until it reaches 0
-    sound_timer: u8,        //same as delay_timer, gives of a beeping sound until 0
-    registers: [u8; 16],    //variable registers
-    display: [u32; 64 * 32], // 64 * 32 pixels to write to
+    memory: [u8; 4096],         //4 kB of RAM
+    pc: usize,                  //program counter: current instruction in memory
+    ir: u16,                    //index register: locations in memory
+    fn_stack: Vec<u16>,         //stack for functions
+    delay_timer: u8,            //timer decremented at 60 Hz until it reaches 0
+    sound_timer: u8,            //same as delay_timer, gives of a beeping sound until 0
+    registers: [u8; 16],        //variable registers
+    display: [u32; 64 * 32],    // 64 * 32 pixels to write to
 }
 
 impl Emulator {
@@ -38,9 +42,9 @@ impl Emulator {
 
         Self {
             memory,
-            pc: 0,
+            pc: 0x200,
             ir: 0,
-            stack: Vec::new(),
+            fn_stack: Vec::new(),
             delay_timer: 0,
             sound_timer: 0,
             registers: [0; 16],
@@ -48,16 +52,85 @@ impl Emulator {
         }
     }
 
-    pub fn fetch_decode(&self) {
+    pub fn load_rom(&mut self, r: rom::ROMLoader) {
+        // load rom into memory after the first 512 bytes
+        self.memory[0x200..0x200+r.len].copy_from_slice(&r.bytes[0..r.len]);
+    }
+
+    // fetch - decode - execute
+    pub fn fde(&mut self) {
         let mut instruction: u16;
         instruction = self.memory[self.pc] as u16;
         instruction <<= 8;
-        instruction += self.memory[self.pc+1] as u16;
-        match (instruction) {
-            
-            _  => return,
+        instruction |= self.memory[self.pc+1] as u16;
+
+        let x = instruction >> 8 & 15;
+        let y = instruction >> 4 & 15;
+        let n = instruction >> 0 & 15;
+        let nn = (instruction & 255) as u8;
+        let nnn = instruction & 4095;
+
+        match instruction >> 12 {
+            0x0 => match instruction & 15 { 
+                0 => self.display = [0; 64 * 32],  // 00e0: clear screen
+                _ => (),
+            }
+            0x1 => self.pc = (nnn - 2) as usize, // 1nnn: jump
+            0x6 => self.registers[x as usize] = nn, // 6xnn: set
+            0x7 => self.registers[x as usize] += nn, // 7xnn: add
+            0xa => self.ir = nnn, // annn: set index
+            0xd =>  /* dxyn: display */ {
+                
+                let (mut cx, mut cy): (usize, usize);
+               
+                self.registers[Self::FLAG_REG] = 0;
+                
+                cy = (self.registers[y as usize] % 32) as usize;
+                for i in 0..n {
+                    cx = (self.registers[x as usize] % 64) as usize;
+                    
+                    let byte = self.memory[(self.ir + i) as usize];
+                    for j in (0..8).rev() {
+                        let bit = (byte >> j) & 1;
+
+                        if bit == 1 && self.active_pixel(cx, cy) {
+                            self.set_pixel(cx, cy, 0);
+                            self.registers[Self::FLAG_REG] = 1;
+                        } else if bit == 1 && !self.active_pixel(cx, cy) {
+                            self.set_pixel(cx, cy, 0xffffffff);
+                        }
+                        cx += 1;
+                        if cx == 63 { break; }
+                    }
+                    cy +=1;
+                    if cy == 31 { break; }
+                }
+            },
+            _  => (),
         }
 
         self.pc += 2;
+    } 
+
+    fn active_pixel(&self, x: usize, y: usize) -> bool {
+        self.display[y * 64 + x] & 255 != 0
+    }
+
+    fn set_pixel(&mut self, x: usize, y: usize, v: u32) {
+        self.display[y * 64 + x] = v;
+    }
+
+    pub fn display(&self) {
+        for x in 0..64 {
+            for y in 0..32 {
+                let p = self.display[y * 64 + x];
+                shapes::draw_rectangle(x as f32 * 10.0, y as f32 * 10.0, 10.0, 10.0, Color {
+                    r: (p >> 24 & 255) as f32 / 255.0,
+                    g: (p >> 16 & 255) as f32 / 255.0,
+                    b: (p >>  8 & 255) as f32 / 255.0,
+                    a: (p >>  0 & 255) as f32 / 255.0,
+                });
+            }
+        }
     }
 }
