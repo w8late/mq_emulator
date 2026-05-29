@@ -1,4 +1,4 @@
-use macroquad::{color::Color, shapes};
+use macroquad::{color, input, shapes};
 use crate::chip8::rom;
 
 #[allow(dead_code)]
@@ -15,7 +15,6 @@ pub struct Emulator {
 
 impl Emulator {
     const FLAG_REG: usize = 15; //the last variable register is also a flag register
-
     pub fn new() -> Self {
         let mut memory = [0; 4096];
         
@@ -124,7 +123,7 @@ impl Emulator {
         for x in 0..64 {
             for y in 0..32 {
                 let p = self.display[y * 64 + x];
-                shapes::draw_rectangle(x as f32 * 10.0, y as f32 * 10.0, 10.0, 10.0, Color {
+                shapes::draw_rectangle(x as f32 * 10.0, y as f32 * 10.0, 10.0, 10.0, color::Color {
                     r: (p >> 24 & 255) as f32 / 255.0,
                     g: (p >> 16 & 255) as f32 / 255.0,
                     b: (p >>  8 & 255) as f32 / 255.0,
@@ -132,5 +131,29 @@ impl Emulator {
                 });
             }
         }
+    }
+}
+
+#[allow(dead_code)]
+const fn get_key(k: u8) -> Option<input::KeyCode> {
+    use input::KeyCode::*;
+    match k {
+        0x1 => Some(Kp1),
+        0x2 => Some(Kp2),
+        0x3 => Some(Kp3),
+        0xc => Some(Kp4),
+        0x4 => Some(Q),
+        0x5 => Some(W),
+        0x6 => Some(E),
+        0xd => Some(R),
+        0x7 => Some(A),
+        0x8 => Some(S),
+        0x9 => Some(D),
+        0xe => Some(F),
+        0xa => Some(Z),
+        0x0 => Some(X),
+        0xb => Some(C),
+        0xf => Some(V),
+        _ => None
     }
 }
