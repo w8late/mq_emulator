@@ -38,7 +38,6 @@ impl Emulator {
             0xF0, 0x80, 0xF0, 0x80, 0x80  // F
         ]);
 
-
         Self {
             memory,
             pc: 0x200,
@@ -70,25 +69,28 @@ impl Emulator {
         let nnn = instruction & 4095;
 
         match instruction >> 12 {
-            0x0 => match instruction & 15 { 
-                0 => self.display = [0; 64 * 32],  // 00e0: clear screen
-                _ => (),
-            }
             0x1 => self.pc = (nnn - 2) as usize, // 1nnn: jump
+            0x2 => {
+                self.fn_stack.push(self.pc as u16);
+                self.pc = (nnn - 2) as usize;
+            }, // 2nnn: subroutine (call)
             0x6 => self.registers[x as usize] = nn, // 6xnn: set
             0x7 => self.registers[x as usize] += nn, // 7xnn: add
             0xa => self.ir = nnn, // annn: set index
-            0xd =>  /* dxyn: display */ {
+            0x3 => self.pc += (self.registers[x as usize] == nn) as usize * 2, // 3xnn: skip cond. (if equal)
+            0x4 => self.pc += (self.registers[x as usize] != nn) as usize * 2, // 4xnn: skip cond. (if not equal)
+            0x5 => self.pc += (self.registers[x as usize] == self.registers[y as usize]) as usize * 2, // 5xy0: skip cond. (if equal)
+            0x9 => self.pc += (self.registers[x as usize] != self.registers[y as usize]) as usize * 2, // 9xy0: skip cond. (if not equal)
+            0xd => { /* dxyn: display */ 
                 
+                self.registers[Self::FLAG_REG] = 0;  
                 let (mut cx, mut cy): (usize, usize);
-               
-                self.registers[Self::FLAG_REG] = 0;
-                
                 cy = (self.registers[y as usize] % 32) as usize;
+
                 for i in 0..n {
                     cx = (self.registers[x as usize] % 64) as usize;
-                    
                     let byte = self.memory[(self.ir + i) as usize];
+
                     for j in (0..8).rev() {
                         let bit = (byte >> j) & 1;
 
@@ -105,7 +107,39 @@ impl Emulator {
                     if cy == 31 { break; }
                 }
             },
-            _  => (),
+          
+            0xf => match instruction & 255 {
+                0x1e => self.ir += self.registers[x as usize] as u16, //fx1e: add to index
+                _ => (),
+            },
+            0x0 => match instruction & 255 { 
+                0xe0 => self.display = [0; 64 * 32],  // 00e0: clear screen
+                0xee => self.pc = self.fn_stack.pop().expect("popping empty stack") as usize, // 00ee: subroutine (pop)
+                _ => (),
+            },
+            0xe => match instruction & 255 { 
+                0x9e => if let Some(code) = get_key_code(x) { if input::is_key_down(code) { self.pc += 2 } } // ex9e: skip if key is down
+                0xa1 => if let Some(code) = get_key_code(x) { if !input::is_key_down(code) { self.pc += 2 } } // exa1: skip if key is not down
+
+                _ => (),
+            },
+            0x8 => match instruction & 16 {
+                0x0 => self.registers[x as usize] = self.registers[y as usize], // 8xy0: set
+                0x1 => self.registers[x as usize] |= self.registers[y as usize], // 8xy1: binary or
+                0x2 => self.registers[x as usize] &= self.registers[y as usize], // 8xy2: binary and
+                0x3 => self.registers[x as usize] ^= self.registers[y as usize], // 8xy3: binary xor
+                0x4 => self.registers[x as usize] += self.registers[y as usize], // 8xy4: add
+                0x5 =>  {  // 8xy5: subtract
+                    self.registers[Self::FLAG_REG] = if self.registers[x as usize] >= self.registers[y as usize] { 1 } else { 0 };
+                    self.registers[x as usize] -= self.registers[y as usize]
+                },
+                0x7 =>  {  // 8xy7: subtract
+                    self.registers[Self::FLAG_REG] = if self.registers[y as usize] >= self.registers[x as usize] { 1 } else { 0 };
+                    self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize]
+                },
+                _ => (),
+            }
+            _  => panic!("Instruction not implemented: {:x}", instruction),
         }
 
         self.pc += 2;
@@ -134,8 +168,7 @@ impl Emulator {
     }
 }
 
-#[allow(dead_code)]
-const fn get_key(k: u8) -> Option<input::KeyCode> {
+const fn get_key_code(k: u16) -> Option<input::KeyCode> {
     use input::KeyCode::*;
     match k {
         0x1 => Some(Kp1),

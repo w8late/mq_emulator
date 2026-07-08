@@ -1,6 +1,7 @@
 mod chip8;
 mod window;
 
+use std::env;
 use macroquad::prelude::*;
 use chip8::{Emulator, rom};
 use window::configuration;
@@ -8,7 +9,13 @@ use window::configuration;
 #[macroquad::main(configuration)]
 async fn main() {
     let mut em = Emulator::new();
-    em.load_rom(rom::ROMLoader::new("roms/ibm_logo.ch8").expect("can't open file"));
+    let args = env::args().collect::<Vec<_>>();
+    if args.len() < 2 {
+        println!("Pass a ROM file to the emulator!");
+        return;
+    }
+
+    em.load_rom(rom::ROMLoader::new(&*args[1]).expect("can't open file"));
 
     loop {
         clear_background(BLACK);

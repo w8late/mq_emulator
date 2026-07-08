@@ -6,7 +6,8 @@ pub struct ROMLoader {
 }
 
 impl ROMLoader {
-    pub fn new(filename: &str) -> io::Result<Self> {
+    pub fn new<'a, T>(filename: T) -> io::Result<Self> 
+    where T: Into<&'a str> + AsRef<std::path::Path> {
         let mut bytes = [0; 4096];
         let mut file= File::open(filename)?;
         let len = file.read(&mut bytes)?;
