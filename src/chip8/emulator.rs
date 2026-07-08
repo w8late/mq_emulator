@@ -1,5 +1,7 @@
 use macroquad::{color, input, shapes};
 use crate::chip8::rom;
+use crate::chip8::timer;
+use crate::chip8::timer::CountdownTimer;
 
 #[allow(dead_code)]
 pub struct Emulator {
@@ -7,8 +9,8 @@ pub struct Emulator {
     pc: usize,                  //program counter: current instruction in memory
     ir: u16,                    //index register: locations in memory
     fn_stack: Vec<u16>,         //stack for functions
-    delay_timer: u8,            //timer decremented at 60 Hz until it reaches 0
-    sound_timer: u8,            //same as delay_timer, gives of a beeping sound until 0
+    delay_timer: timer::CountdownTimer<60>,            //timer decremented at 60 Hz until it reaches 0
+    sound_timer: timer::CountdownTimer<60>,            //same as delay_timer, gives of a beeping sound until 0
     registers: [u8; 16],        //variable registers
     display: [u32; 64 * 32],    // 64 * 32 pixels to write to
 }
@@ -43,8 +45,8 @@ impl Emulator {
             pc: 0x200,
             ir: 0,
             fn_stack: Vec::new(),
-            delay_timer: 0,
-            sound_timer: 0,
+            delay_timer: CountdownTimer::with_thread(),
+            sound_timer: CountdownTimer::with_thread(),
             registers: [0; 16],
             display: [0; 64 * 32],
         }
@@ -75,12 +77,13 @@ impl Emulator {
                 self.pc = (nnn - 2) as usize;
             }, // 2nnn: subroutine (call)
             0x6 => self.registers[x as usize] = nn, // 6xnn: set
-            0x7 => self.registers[x as usize] += nn, // 7xnn: add
+            0x7 => self.registers[x as usize] = self.registers[x as usize].wrapping_add(nn), // 7xnn: add
             0xa => self.ir = nnn, // annn: set index
             0x3 => self.pc += (self.registers[x as usize] == nn) as usize * 2, // 3xnn: skip cond. (if equal)
             0x4 => self.pc += (self.registers[x as usize] != nn) as usize * 2, // 4xnn: skip cond. (if not equal)
             0x5 => self.pc += (self.registers[x as usize] == self.registers[y as usize]) as usize * 2, // 5xy0: skip cond. (if equal)
             0x9 => self.pc += (self.registers[x as usize] != self.registers[y as usize]) as usize * 2, // 9xy0: skip cond. (if not equal)
+            0xc => self.registers[x as usize] = rand::random::<u8>() & nn, // cxnn: random
             0xd => { /* dxyn: display */ 
                 
                 self.registers[Self::FLAG_REG] = 0;  
