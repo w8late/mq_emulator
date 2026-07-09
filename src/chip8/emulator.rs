@@ -95,6 +95,7 @@ impl Emulator {
                     let byte = self.memory[(self.ir + i) as usize];
 
                     for j in (0..8).rev() {
+                        if cy * 64 + cx >= 2048 { break; }
                         let bit = (byte >> j) & 1;
 
                         if bit == 1 && self.active_pixel(cx, cy) {
@@ -110,10 +111,22 @@ impl Emulator {
                     if cy == 31 { break; }
                 }
             },
-          
             0xf => match instruction & 255 {
                 0x1e => self.ir += self.registers[x as usize] as u16, //fx1e: add to index
-                _ => (),
+                0x7 => self.registers[x as usize] = self.delay_timer.get(), // fx07: set the x-register to the delay_timer
+                0x15 => self.delay_timer.set(self.registers[x as usize]), // fx15: set the delay timer
+                0x18 => self.sound_timer.set(self.registers[x as usize]), // fx18: set the sound timer 
+                0x55 => for i in 0..=x {
+                    self.memory[(self.ir + i) as usize] = self.registers[i as usize];
+                },  // fx55: store memory
+                0x65 => for i in 0..=x {
+                    self.registers[i as usize] = self.memory[(self.ir + i) as usize];
+                } // fx65: load memory
+                0x29 => self.ir = 0x50 + (self.registers[x as usize] & 15) as u16 * 5, // fx29: font character
+                0x33 => for i in 0..3 { // fx33: binary-codded decimal conversion
+                    self.memory[(self.ir+i) as usize] = self.registers[x as usize] % 10_u8.pow(2-i as u32);
+                }
+                _ => println!("Instruction not implemented: {:x}", instruction),
             },
             0x0 => match instruction & 255 { 
                 0xe0 => self.display = [0; 64 * 32],  // 00e0: clear screen
@@ -141,7 +154,7 @@ impl Emulator {
                     self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize]
                 },
                 _ => (),
-            }
+            },
             _  => panic!("Instruction not implemented: {:x}", instruction),
         }
 

@@ -29,14 +29,15 @@ impl<const HZ: u64> CountdownTimer<HZ> {
         });
     }
     
-    pub fn set_time(&mut self, new_time: u8) {
+    pub fn set(&mut self, new_time: u8) {
         *self.0.lock().unwrap() = new_time; 
     }
 
-    pub fn get_time(&self) -> u8 {
+    pub fn get(&self) -> u8 {
         *self.0.lock().unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn is_not_zero(&self) -> bool {
         *self.0.lock().unwrap() > 0 
     }
