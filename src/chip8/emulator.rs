@@ -1,7 +1,7 @@
+use macroquad::input::is_key_down;
 use macroquad::{color, input, shapes};
 use crate::chip8::rom;
 use crate::chip8::timer;
-use crate::chip8::timer::CountdownTimer;
 
 #[allow(dead_code)]
 pub struct Emulator {
@@ -45,8 +45,8 @@ impl Emulator {
             pc: 0x200,
             ir: 0,
             fn_stack: Vec::new(),
-            delay_timer: CountdownTimer::with_thread(),
-            sound_timer: CountdownTimer::with_thread(),
+            delay_timer: timer::CountdownTimer::with_thread(),
+            sound_timer: timer::CountdownTimer::with_thread(),
             registers: [0; 16],
             display: [0; 64 * 32],
         }
@@ -72,10 +72,10 @@ impl Emulator {
 
         match instruction >> 12 {
             0x1 => self.pc = (nnn - 2) as usize, // 1nnn: jump
-            0x2 => {
+            0x2 => { // 2nnn: subroutine (call)
                 self.fn_stack.push(self.pc as u16);
                 self.pc = (nnn - 2) as usize;
-            }, // 2nnn: subroutine (call)
+            }, 
             0x6 => self.registers[x as usize] = nn, // 6xnn: set
             0x7 => self.registers[x as usize] = self.registers[x as usize].wrapping_add(nn), // 7xnn: add
             0xa => self.ir = nnn, // annn: set index
@@ -84,7 +84,7 @@ impl Emulator {
             0x5 => self.pc += (self.registers[x as usize] == self.registers[y as usize]) as usize * 2, // 5xy0: skip cond. (if equal)
             0x9 => self.pc += (self.registers[x as usize] != self.registers[y as usize]) as usize * 2, // 9xy0: skip cond. (if not equal)
             0xc => self.registers[x as usize] = rand::random::<u8>() & nn, // cxnn: random
-            0xd => { /* dxyn: display */ 
+            0xd => { // dxyn: display 
                 
                 self.registers[Self::FLAG_REG] = 0;  
                 let (mut cx, mut cy): (usize, usize);
@@ -125,7 +125,17 @@ impl Emulator {
                 0x29 => self.ir = 0x50 + (self.registers[x as usize] & 15) as u16 * 5, // fx29: font character
                 0x33 => for i in 0..3 { // fx33: binary-codded decimal conversion
                     self.memory[(self.ir+i) as usize] = self.registers[x as usize] % 10_u8.pow(2-i as u32);
-                }
+                },
+                0x0a => { // fx0a: get key 
+                        self.pc -= 2;
+                        for i in 0x0..0xf {
+                        if let Some(key) = get_key_code(i) && is_key_down(key) {
+                            self.registers[x as usize] = i as u8;
+                            self.pc += 2;
+                            break;
+                        }
+                    }
+                },
                 _ => println!("Instruction not implemented: {:x}", instruction),
             },
             0x0 => match instruction & 255 { 
@@ -134,9 +144,8 @@ impl Emulator {
                 _ => (),
             },
             0xe => match instruction & 255 { 
-                0x9e => if let Some(code) = get_key_code(x) { if input::is_key_down(code) { self.pc += 2 } } // ex9e: skip if key is down
-                0xa1 => if let Some(code) = get_key_code(x) { if !input::is_key_down(code) { self.pc += 2 } } // exa1: skip if key is not down
-
+                0x9e => if let Some(code) = get_key_code(x) && input::is_key_down(code) { self.pc += 2 } // ex9e: skip if key is down
+                0xa1 => if let Some(code) = get_key_code(x) && !input::is_key_down(code) { self.pc += 2 } // exa1: skip if key is not down
                 _ => (),
             },
             0x8 => match instruction & 16 {
